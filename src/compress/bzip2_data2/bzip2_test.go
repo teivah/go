@@ -216,6 +216,7 @@ var (
 	digits = mustLoadFile("testdata/e.txt.bz2")
 	newton = mustLoadFile("testdata/Isaac.Newton-Opticks.txt.bz2")
 	random = mustLoadFile("testdata/random.data.bz2")
+	large  = mustLoadFile("/Users/teivah/Movies/2020-06-27 18-45-28.mp4.bz2")
 )
 
 func benchmarkDecode(b *testing.B, compressed []byte) {
@@ -238,3 +239,4 @@ func benchmarkDecode(b *testing.B, compressed []byte) {
 func BenchmarkDecodeDigits(b *testing.B) { benchmarkDecode(b, digits) }
 func BenchmarkDecodeNewton(b *testing.B) { benchmarkDecode(b, newton) }
 func BenchmarkDecodeRand(b *testing.B)   { benchmarkDecode(b, random) }
+func BenchmarkDecodeLarge(b *testing.B)  { benchmarkDecode(b, large) }
