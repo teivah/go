@@ -12,7 +12,7 @@ type huffmanTree struct {
 	// nodes contains all the non-leaf nodes in the tree. nodes[0] is the
 	// root of the tree and nextNode contains the index of the next element
 	// of nodes to use when the tree is being constructed.
-	nodes    []huffmanNode
+	nodes    huffmanNodes
 	nextNode int
 }
 
@@ -23,9 +23,11 @@ type huffmanTree struct {
 // The symbols are uint16s because bzip2 encodes not only MTF indexes in the
 // tree, but also two magic values for run-length encoding and an EOF symbol.
 // Thus there are more than 256 possible symbols.
-type huffmanNode struct {
-	left, right           uint16
-	leftValue, rightValue uint16
+type huffmanNodes struct {
+	left       []uint16
+	right      []uint16
+	leftValue  []uint16
+	rightValue []uint16
 }
 
 // invalidNodeValue is an invalid index which marks a leaf node in the tree.
@@ -37,7 +39,10 @@ func (t *huffmanTree) Decode(br *bitReader) (v uint16) {
 	nodeIndex := uint16(0) // node 0 is the root of the tree.
 
 	for {
-		node := &t.nodes[nodeIndex]
+		nodeLeft := &t.nodes.left[nodeIndex]
+		nodeRight := &t.nodes.right[nodeIndex]
+		nodeLeftValue := &t.nodes.leftValue[nodeIndex]
+		nodeRightValue := &t.nodes.rightValue[nodeIndex]
 
 		var bit uint16
 		if br.bits > 0 {
@@ -53,7 +58,7 @@ func (t *huffmanTree) Decode(br *bitReader) (v uint16) {
 
 		// Trick a compiler into generating conditional move instead of branch,
 		// by making both loads unconditional.
-		l, r := node.left, node.right
+		l, r := *nodeLeft, *nodeRight
 
 		if bit == 1 {
 			nodeIndex = l
@@ -64,7 +69,7 @@ func (t *huffmanTree) Decode(br *bitReader) (v uint16) {
 		if nodeIndex == invalidNodeValue {
 			// We found a leaf. Use the value of bit to decide
 			// whether is a left or a right value.
-			l, r := node.leftValue, node.rightValue
+			l, r := *nodeLeftValue, *nodeRightValue
 			if bit == 1 {
 				v = l
 			} else {
@@ -120,18 +125,14 @@ func newHuffmanTree(lengths []uint8) (huffmanTree, error) {
 	code := uint32(0)
 	length := uint8(32)
 
-	codes := huffmanCodes{
-		code:    make([]uint32, len(lengths)),
-		codeLen: make([]uint8, len(lengths)),
-		value:   make([]uint16, len(lengths)),
-	}
+	codes := make([]huffmanCode, len(lengths))
 	for i := len(pairs) - 1; i >= 0; i-- {
 		if length > pairs[i].length {
 			length = pairs[i].length
 		}
-		codes.code[i] = code
-		codes.codeLen[i] = length
-		codes.value[i] = pairs[i].value
+		codes[i].code = code
+		codes[i].codeLen = length
+		codes[i].value = pairs[i].value
 		// We need to 'increment' the code, which means treating |code|
 		// like a |length| bit number.
 		code += 1 << (32 - length)
@@ -139,10 +140,17 @@ func newHuffmanTree(lengths []uint8) (huffmanTree, error) {
 
 	// Now we can sort by the code so that the left half of each branch are
 	// grouped together, recursively.
-	sort.Sort(&codes)
+	sort.Slice(codes, func(i, j int) bool {
+		return codes[i].code < codes[j].code
+	})
 
-	t.nodes = make([]huffmanNode, len(codes.code))
-	_, err := buildHuffmanNode(&t, codes, 0, 0, len(codes.code))
+	t.nodes = huffmanNodes{
+		left:       make([]uint16, len(codes)),
+		right:      make([]uint16, len(codes)),
+		leftValue:  make([]uint16, len(codes)),
+		rightValue: make([]uint16, len(codes)),
+	}
+	_, err := buildHuffmanNode(&t, codes, 0)
 	return t, err
 }
 
@@ -153,44 +161,29 @@ type huffmanSymbolLengthPair struct {
 }
 
 // huffmanCode contains a symbol, its code and code length.
-type huffmanCodes struct {
-	code    []uint32
-	codeLen []uint8
-	value   []uint16
-}
-
-func (h *huffmanCodes) Len() int {
-	return len(h.code)
-}
-
-func (h *huffmanCodes) Less(i, j int) bool {
-	return h.code[i] < h.code[j]
-}
-
-func (h *huffmanCodes) Swap(i, j int) {
-	h.code[i], h.code[j] = h.code[j], h.code[i]
-	h.codeLen[i], h.codeLen[j] = h.codeLen[j], h.codeLen[i]
-	h.value[i], h.value[j] = h.value[j], h.value[i]
+type huffmanCode struct {
+	code    uint32
+	codeLen uint8
+	value   uint16
 }
 
 // buildHuffmanNode takes a slice of sorted huffmanCodes and builds a node in
 // the Huffman tree at the given level. It returns the index of the newly
 // constructed node.
-func buildHuffmanNode(t *huffmanTree, codes huffmanCodes, level uint32, l, r int) (nodeIndex uint16, err error) {
+func buildHuffmanNode(t *huffmanTree, codes []huffmanCode, level uint32) (nodeIndex uint16, err error) {
 	test := uint32(1) << (31 - level)
 
 	// We have to search the list of codes to find the divide between the left and right sides.
-	firstRightIndex := r - l
-	subcode := codes.code[l:r]
-	for i, code := range subcode {
-		if code&test != 0 {
-			firstRightIndex = i + l
+	firstRightIndex := len(codes)
+	for i, code := range codes {
+		if code.code&test != 0 {
+			firstRightIndex = i
 			break
 		}
 	}
 
-	left := codes.code[l:firstRightIndex]
-	right := codes.code[firstRightIndex:r]
+	left := codes[:firstRightIndex]
+	right := codes[firstRightIndex:]
 
 	if len(left) == 0 || len(right) == 0 {
 		// There is a superfluous level in the Huffman tree indicating
@@ -205,7 +198,7 @@ func buildHuffmanNode(t *huffmanTree, codes huffmanCodes, level uint32, l, r int
 		// is zero or one. Both cases are invalid because a zero length
 		// tree cannot encode anything and a length-1 tree can only
 		// encode EOF and so is superfluous. We reject both.
-		if len(codes.code) < 2 {
+		if len(codes) < 2 {
 			return 0, StructuralError("empty Huffman tree")
 		}
 
@@ -221,21 +214,21 @@ func buildHuffmanNode(t *huffmanTree, codes huffmanCodes, level uint32, l, r int
 		}
 
 		if len(left) == 0 {
-			return buildHuffmanNode(t, codes, level+1, firstRightIndex, r)
+			return buildHuffmanNode(t, right, level+1)
 		}
-		return buildHuffmanNode(t, codes, level+1, l, firstRightIndex)
+		return buildHuffmanNode(t, left, level+1)
 	}
 
 	nodeIndex = uint16(t.nextNode)
-	node := &t.nodes[t.nextNode]
+	currentNode := t.nextNode
 	t.nextNode++
 
 	if len(left) == 1 {
 		// leaf node
-		node.left = invalidNodeValue
-		node.leftValue = codes.value[l]
+		t.nodes.left[currentNode] = invalidNodeValue
+		t.nodes.leftValue[currentNode] = left[0].value
 	} else {
-		node.left, err = buildHuffmanNode(t, codes, level+1, l, firstRightIndex)
+		t.nodes.left[currentNode], err = buildHuffmanNode(t, left, level+1)
 	}
 
 	if err != nil {
@@ -244,10 +237,10 @@ func buildHuffmanNode(t *huffmanTree, codes huffmanCodes, level uint32, l, r int
 
 	if len(right) == 1 {
 		// leaf node
-		node.right = invalidNodeValue
-		node.rightValue = codes.value[firstRightIndex]
+		t.nodes.right[currentNode] = invalidNodeValue
+		t.nodes.rightValue[currentNode] = right[0].value
 	} else {
-		node.right, err = buildHuffmanNode(t, codes, level+1, firstRightIndex, r)
+		t.nodes.right[currentNode], err = buildHuffmanNode(t, right, level+1)
 	}
 
 	return
