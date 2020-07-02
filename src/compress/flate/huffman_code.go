@@ -17,7 +17,7 @@ type hcode struct {
 }
 
 type huffmanEncoder struct {
-	codes     *hcode
+	codes     hcode
 	freqcache []literalNode
 	bitCount  [17]int32
 	lns       byLiteral // stored to avoid repeated allocation in generate
@@ -52,7 +52,7 @@ type levelInfo struct {
 func maxNode() literalNode { return literalNode{math.MaxUint16, math.MaxInt32} }
 
 func newHuffmanEncoder(size int) *huffmanEncoder {
-	return &huffmanEncoder{codes: &hcode{
+	return &huffmanEncoder{codes: hcode{
 		code: make([]uint16, size),
 		len:  make([]uint16, size),
 	}}

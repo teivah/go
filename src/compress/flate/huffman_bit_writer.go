@@ -574,7 +574,7 @@ func (w *huffmanBitWriter) indexTokens(tokens []token) (numLiterals, numOffsets 
 
 // writeTokens writes a slice of tokens to the output.
 // codes for literal and offset encoding must be supplied.
-func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes *hcode) {
+func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes hcode) {
 	if w.err != nil {
 		return
 	}
