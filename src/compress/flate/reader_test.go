@@ -5,10 +5,8 @@
 package flate
 
 import (
-	"bytes"
 	"io"
 	"io/ioutil"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -31,42 +29,42 @@ var suites = []struct{ name, file string }{
 	{"Newton", "../../testdata/Isaac.Newton-Opticks.txt"},
 }
 
-func BenchmarkDecode(b *testing.B) {
-	doBench(b, func(b *testing.B, buf0 []byte, level, n int) {
-		b.ReportAllocs()
-		b.StopTimer()
-		b.SetBytes(int64(n))
-
-		compressed := new(bytes.Buffer)
-		w, err := NewWriter(compressed, level)
-		if err != nil {
-			b.Fatal(err)
-		}
-		for i := 0; i < n; i += len(buf0) {
-			if len(buf0) > n-i {
-				buf0 = buf0[:n-i]
-			}
-			io.Copy(w, bytes.NewReader(buf0))
-		}
-		w.Close()
-		buf1 := compressed.Bytes()
-		buf0, compressed, w = nil, nil, nil
-		runtime.GC()
-		b.StartTimer()
-		for i := 0; i < b.N; i++ {
-			io.Copy(ioutil.Discard, NewReader(bytes.NewReader(buf1)))
-		}
-	})
-}
+//func BenchmarkDecode(b *testing.B) {
+//	doBench(b, func(b *testing.B, buf0 []byte, level, n int) {
+//		b.ReportAllocs()
+//		b.StopTimer()
+//		b.SetBytes(int64(n))
+//
+//		compressed := new(bytes.Buffer)
+//		w, err := NewWriter(compressed, level)
+//		if err != nil {
+//			b.Fatal(err)
+//		}
+//		for i := 0; i < n; i += len(buf0) {
+//			if len(buf0) > n-i {
+//				buf0 = buf0[:n-i]
+//			}
+//			io.Copy(w, bytes.NewReader(buf0))
+//		}
+//		w.Close()
+//		buf1 := compressed.Bytes()
+//		buf0, compressed, w = nil, nil, nil
+//		runtime.GC()
+//		b.StartTimer()
+//		for i := 0; i < b.N; i++ {
+//			io.Copy(ioutil.Discard, NewReader(bytes.NewReader(buf1)))
+//		}
+//	})
+//}
 
 var levelTests = []struct {
 	name  string
 	level int
 }{
 	{"Huffman", HuffmanOnly},
-	{"Speed", BestSpeed},
-	{"Default", DefaultCompression},
-	{"Compression", BestCompression},
+	//{"Speed", BestSpeed},
+	//{"Default", DefaultCompression},
+	//{"Compression", BestCompression},
 }
 
 var sizes = []struct {
