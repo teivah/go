@@ -94,24 +94,16 @@ func newHuffmanTree(lengths []uint8) (huffmanTree, error) {
 
 	// First we sort the code length assignments by ascending code length,
 	// using the symbol value to break ties.
-	pairs := make([]huffmanSymbolLengthPair, len(lengths))
+	pairs := huffmanSymbolLengthPairs{
+		value:  make([]uint16, len(lengths)),
+		length: make([]uint8, len(lengths)),
+	}
 	for i, length := range lengths {
-		pairs[i].value = uint16(i)
-		pairs[i].length = length
+		pairs.value[i] = uint16(i)
+		pairs.length[i] = length
 	}
 
-	sort.Slice(pairs, func(i, j int) bool {
-		if pairs[i].length < pairs[j].length {
-			return true
-		}
-		if pairs[i].length > pairs[j].length {
-			return false
-		}
-		if pairs[i].value < pairs[j].value {
-			return true
-		}
-		return false
-	})
+	sort.Sort(&pairs)
 
 	// Now we assign codes to the symbols, starting with the longest code.
 	// We keep the codes packed into a uint32, at the most-significant end.
@@ -121,13 +113,13 @@ func newHuffmanTree(lengths []uint8) (huffmanTree, error) {
 	length := uint8(32)
 
 	codes := make([]huffmanCode, len(lengths))
-	for i := len(pairs) - 1; i >= 0; i-- {
-		if length > pairs[i].length {
-			length = pairs[i].length
+	for i := len(pairs.value) - 1; i >= 0; i-- {
+		if length > pairs.length[i] {
+			length = pairs.length[i]
 		}
 		codes[i].code = code
 		codes[i].codeLen = length
-		codes[i].value = pairs[i].value
+		codes[i].value = pairs.value[i]
 		// We need to 'increment' the code, which means treating |code|
 		// like a |length| bit number.
 		code += 1 << (32 - length)
@@ -145,9 +137,31 @@ func newHuffmanTree(lengths []uint8) (huffmanTree, error) {
 }
 
 // huffmanSymbolLengthPair contains a symbol and its code length.
-type huffmanSymbolLengthPair struct {
-	value  uint16
-	length uint8
+type huffmanSymbolLengthPairs struct {
+	value  []uint16
+	length []uint8
+}
+
+func (h *huffmanSymbolLengthPairs) Len() int {
+	return len(h.value)
+}
+
+func (h *huffmanSymbolLengthPairs) Less(i, j int) bool {
+	if h.length[i] < h.length[j] {
+		return true
+	}
+	if h.length[i] > h.length[j] {
+		return false
+	}
+	if h.value[i] < h.value[j] {
+		return true
+	}
+	return false
+}
+
+func (h *huffmanSymbolLengthPairs) Swap(i, j int) {
+	h.value[i], h.value[j] = h.value[j], h.value[i]
+	h.length[i], h.length[j] = h.length[j], h.length[i]
 }
 
 // huffmanCode contains a symbol, its code and code length.
